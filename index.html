@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>States Puzzle</title>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    background: #f4f4f4;
+    color: #222;
+}
+
+header {
+    background: white;
+    border-bottom: 1px solid #ccc;
+    padding: 16px 22px;
+}
+
+h1 {
+    margin: 0;
+    font-size: 23px;
+}
+
+.tabs {
+    background: white;
+    display: flex;
+    border-bottom: 1px solid #ccc;
+    padding-left: 20px;
+}
+
+.tab {
+    padding: 14px 20px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+.tab.active {
+    font-weight: bold;
+    border-bottom: 3px solid black;
+}
+
+.page {
+    display: none;
+    padding: 20px;
+}
+
+.page.active {
+    display: block;
+}
+
+.workspace {
+    display: flex;
+    gap: 25px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.controls {
+    background: white;
+    border: 1px solid #ccc;
+    padding: 15px;
+    border-radius: 8px;
+    width: 220px;
+}
+
+.controls h3 {
+    margin-top: 0;
+}
+
+.colors {
+    display: grid;
+    grid-template-columns: repeat(4, 40px);
+    gap: 8px;
+    margin-bottom: 18px;
+}
+
+.color {
+    width: 40px;
+    height: 40px;
+    border: 2px solid #aaa;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.color.selected {
+    border: 4px solid black;
+}
+
+.tool {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    margin: 7px 0;
+    background: white;
+    border: 1px solid #aaa;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.tool.selected {
+    border: 3px solid black;
+    font-weight: bold;
+}
+
+.grid-container {
+    overflow-x: auto;
+}
+
+#grid {
+    display: grid;
+    grid-template-columns: repeat(11, 50px);
+    width: max-content;
+    border-left: 2px solid black;
+    border-top: 2px solid black;
+}
+
+.cell {
+    width: 50px;
+    height: 50px;
+    border-right: 1px solid #555;
+    border-bottom: 1px solid #555;
+    background: white;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    font-size: 19px;
+    font-weight: bold;
+    cursor: pointer;
+
+    position: relative;
+    user-select: none;
+}
+
+.capital {
+    width: 15px;
+    height: 15px;
+    background: black;
+    border-radius: 50%;
+    position: absolute;
+}
+
+.number {
+    z-index: 2;
+}
+
+#notes {
+    width: min(800px, 100%);
+    height: 500px;
+    padding: 15px;
+    font-size: 17px;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+.saved {
+    margin-top: 15px;
+    font-size: 13px;
+    color: #777;
+}
+
+@media(max-width:600px) {
+
+    #grid {
+        grid-template-columns: repeat(11, 36px);
+    }
+
+    .cell {
+        width: 36px;
+        height: 36px;
+        font-size: 14px;
+    }
+
+}
+</style>
+</head>
+
+<body>
+
+<header>
+    <h1>States Puzzle</h1>
+</header>
+
+<div class="tabs">
+    <button class="tab active" onclick="showPage('puzzle',this)">
+        Puzzle
+    </button>
+
+    <button class="tab" onclick="showPage('notesPage',this)">
+        Notes
+    </button>
+</div>
+
+
+<!-- PUZZLE -->
+
+<div id="puzzle" class="page active">
+
+<div class="workspace">
+
+<div class="controls">
+
+<h3>Colors</h3>
+
+<div class="colors" id="colors"></div>
+
+<h3>Tools</h3>
+
+<button class="tool" onclick="chooseTool('number',this)">
+    Number
+</button>
+
+<button class="tool" onclick="chooseTool('capital',this)">
+    ● Capital
+</button>
+
+<button class="tool" onclick="chooseTool('erase',this)">
+    Eraser
+</button>
+
+<button class="tool" onclick="clearBoard()">
+    Clear Board
+</button>
+
+<div class="saved">
+Changes save automatically.
+</div>
+
+</div>
+
+
+<div class="grid-container">
+    <div id="grid"></div>
+</div>
+
+</div>
+
+</div>
+
+
+<!-- NOTES -->
+
+<div id="notesPage" class="page">
+
+<h2>Notes</h2>
+
+<textarea
+id="notes"
+placeholder="Write deductions here...
+
+Example:
+
+Purple = 7 cells
+
+12:
+7 → 4 = 4
+4 → 4 = 4
+4 → 7 = 4
+Total = 12
+
+Possible capital at R3C2
+"></textarea>
+
+<p class="saved">
+Notes save automatically.
+</p>
+
+</div>
+
+
+<script>
+
+const COLORS = [
+"#c9a0ff",
+"#99cfff",
+"#9fe6a0",
+"#ff9999",
+"#ffe184",
+"#ffacd5",
+"#8fe1dc",
+"#c4c4c4",
+"#ffbd82",
+"#b8df89",
+"#dda4ff",
+"#91a9ff"
+];
+
+let selectedTool = "color";
+let selectedColor = COLORS[0];
+
+let cells = [];
+
+
+// ---------------------------
+// LOAD SAVE
+// ---------------------------
+
+const saved = localStorage.getItem("statesPuzzle");
+
+if(saved){
+
+    try{
+        cells = JSON.parse(saved).cells || [];
+    }catch(e){
+        cells = [];
+    }
+
+}
+
+while(cells.length < 121){
+
+    cells.push({
+        color:null,
+        number:"",
+        capital:false
+    });
+
+}
+
+
+// ---------------------------
+// COLORS
+// ---------------------------
+
+const colorsDiv = document.getElementById("colors");
+
+COLORS.forEach((color,index)=>{
+
+    const button = document.createElement("button");
+
+    button.className = "color";
+
+    if(index === 0)
+        button.classList.add("selected");
+
+    button.style.background = color;
+
+    button.onclick = ()=>{
+
+        selectedTool = "color";
+        selectedColor = color;
+
+        document
+        .querySelectorAll(".color")
+        .forEach(x=>x.classList.remove("selected"));
+
+        document
+        .querySelectorAll(".tool")
+        .forEach(x=>x.classList.remove("selected"));
+
+        button.classList.add("selected");
+
+    };
+
+    colorsDiv.appendChild(button);
+
+});
+
+
+// ---------------------------
+// GRID
+// ---------------------------
+
+const grid = document.getElementById("grid");
+
+function createGrid(){
+
+    grid.innerHTML = "";
+
+    cells.forEach((data,index)=>{
+
+        const cell = document.createElement("div");
+
+        cell.className = "cell";
+
+        cell.onclick = ()=>editCell(index);
+
+        grid.appendChild(cell);
+
+    });
+
+    draw();
+
+}
+
+
+function draw(){
+
+    document
+    .querySelectorAll(".cell")
+    .forEach((cell,index)=>{
+
+        const data = cells[index];
+
+        cell.innerHTML = "";
+
+        cell.style.background =
+            data.color || "white";
+
+
+        if(data.number){
+
+            const number =
+                document.createElement("span");
+
+            number.className = "number";
+
+            number.textContent =
+                data.number;
+
+            cell.appendChild(number);
+
+        }
+
+
+        if(data.capital){
+
+            const dot =
+                document.createElement("div");
+
+            dot.className = "capital";
+
+            cell.appendChild(dot);
+
+        }
+
+    });
+
+}
+
+
+// ---------------------------
+// EDIT
+// ---------------------------
+
+function editCell(index){
+
+    const cell = cells[index];
+
+
+    if(selectedTool === "color"){
+
+        cell.color = selectedColor;
+
+    }
+
+
+    if(selectedTool === "capital"){
+
+        cell.capital =
+            !cell.capital;
+
+    }
+
+
+    if(selectedTool === "number"){
+
+        const value = prompt(
+            "Number:",
+            cell.number
+        );
+
+        if(value !== null)
+            cell.number = value;
+
+    }
+
+
+    if(selectedTool === "erase"){
+
+        cell.color = null;
+        cell.number = "";
+        cell.capital = false;
+
+    }
+
+
+    save();
+    draw();
+
+}
+
+
+// ---------------------------
+// TOOLS
+// ---------------------------
+
+function chooseTool(tool,button){
+
+    selectedTool = tool;
+
+    document
+    .querySelectorAll(".color")
+    .forEach(x=>x.classList.remove("selected"));
+
+    document
+    .querySelectorAll(".tool")
+    .forEach(x=>x.classList.remove("selected"));
+
+    button.classList.add("selected");
+
+}
+
+
+// ---------------------------
+// SAVE
+// ---------------------------
+
+function save(){
+
+    localStorage.setItem(
+        "statesPuzzle",
+        JSON.stringify({cells})
+    );
+
+}
+
+
+// ---------------------------
+// NOTES
+// ---------------------------
+
+const notes =
+    document.getElementById("notes");
+
+notes.value =
+    localStorage.getItem("statesNotes") || "";
+
+notes.addEventListener("input",()=>{
+
+    localStorage.setItem(
+        "statesNotes",
+        notes.value
+    );
+
+});
+
+
+// ---------------------------
+// CLEAR
+// ---------------------------
+
+function clearBoard(){
+
+    if(!confirm("Clear the entire board?"))
+        return;
+
+    cells = [];
+
+    for(let i=0;i<121;i++){
+
+        cells.push({
+            color:null,
+            number:"",
+            capital:false
+        });
+
+    }
+
+    save();
+    createGrid();
+
+}
+
+
+// ---------------------------
+// TABS
+// ---------------------------
+
+function showPage(id,button){
+
+    document
+    .querySelectorAll(".page")
+    .forEach(x=>x.classList.remove("active"));
+
+    document
+    .querySelectorAll(".tab")
+    .forEach(x=>x.classList.remove("active"));
+
+    document
+    .getElementById(id)
+    .classList.add("active");
+
+    button.classList.add("active");
+
+}
+
+
+// START
+
+createGrid();
+
+</script>
+
+</body>
+</html>
